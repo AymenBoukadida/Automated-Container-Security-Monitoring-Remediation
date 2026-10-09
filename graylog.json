@@ -1,0 +1,94 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "falco-remediation",
+        "options": {}
+      },
+      "name": "Graylog Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "falco-trigger"
+    },
+    {
+      "parameters": {
+        "keepOnlySet": true,
+        "values": {
+          "string": [
+            {
+              "name": "pod_name",
+              "value": "={{ $json.body.backlog[0].fields.filebeat_output_fields_k8s_pod_name }}"
+            },
+            {
+              "name": "namespace",
+              "value": "={{ $json.body.backlog[0].fields.filebeat_output_fields_k8s_ns_name }}"
+            },
+            {
+              "name": "container_id",
+              "value": "={{ $json.body.backlog[0].fields.filebeat_container_id || $json.body.backlog[0].fields.container_id }}"
+            },
+            {
+              "name": "rule",
+              "value": "={{ $json.body.backlog[0].fields.filebeat_rule }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Extract Fields",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.pod_name }}",
+              "operation": "notEmpty"
+            }
+          ]
+        }
+      },
+      "name": "K8s or Docker?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "command": "=kubectl delete pod {{ $json.pod_name }} -n {{ $json.namespace }} --force --grace-period=0"
+      },
+      "name": "K8s Remediation",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [920, 180]
+    },
+    {
+      "parameters": {
+        "command": "=docker rm -f {{ $json.container_id }}"
+      },
+      "name": "Docker Remediation",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [920, 420]
+    }
+  ],
+  "connections": {
+    "Graylog Webhook": {
+      "main": [[{ "node": "Extract Fields", "type": "main", "index": 0 }]]
+    },
+    "Extract Fields": {
+      "main": [[{ "node": "K8s or Docker?", "type": "main", "index": 0 }]]
+    },
+    "K8s or Docker?": {
+      "main": [
+        [{ "node": "K8s Remediation", "type": "main", "index": 0 }],
+        [{ "node": "Docker Remediation", "type": "main", "index": 0 }]
+      ]
+    }
+  }
+}
